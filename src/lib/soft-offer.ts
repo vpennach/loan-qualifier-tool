@@ -50,16 +50,25 @@ const LARGE_LOAN_THRESHOLD = 1_500_000; // Section 7.4
 const SECOND_POSITION_CUSHION = { low: 0.73, high: 0.8 }; // A2
 const AMORTIZATION_MONTHS = 36;
 
-export function applicableLtvBand(propertyState: string, propertyType: PropertyType): LtvBand {
-  if (CAPPED_LTV_STATES.includes(propertyState)) return CAPPED_STATE_BAND;
+export function applicableLtvBand(
+  propertyState: string,
+  propertyType: PropertyType
+): LtvBand & { label: string } {
+  if (CAPPED_LTV_STATES.includes(propertyState)) {
+    return { ...CAPPED_STATE_BAND, label: "NY / MI / MN capped-state band" };
+  }
   // A4: land/industrial fall back to the commercial band.
-  if (RESIDENTIAL_PROPERTY_TYPES.includes(propertyType)) return RESIDENTIAL_STANDARD_BAND;
-  return COMMERCIAL_STANDARD_BAND;
+  if (RESIDENTIAL_PROPERTY_TYPES.includes(propertyType)) {
+    return { ...RESIDENTIAL_STANDARD_BAND, label: "Residential, standard-state band" };
+  }
+  return { ...COMMERCIAL_STANDARD_BAND, label: "Commercial, standard-state band" };
 }
 
 function applicableFactorRate(propertyType: PropertyType) {
   // A4: land/industrial fall back to the commercial factor rate.
-  return RESIDENTIAL_PROPERTY_TYPES.includes(propertyType) ? RESIDENTIAL_FACTOR_RATE : COMMERCIAL_FACTOR_RATE;
+  return RESIDENTIAL_PROPERTY_TYPES.includes(propertyType)
+    ? { ...RESIDENTIAL_FACTOR_RATE, label: "Residential factor rate" }
+    : { ...COMMERCIAL_FACTOR_RATE, label: "Commercial factor rate" };
 }
 
 export interface SoftOfferInput {
@@ -68,6 +77,27 @@ export interface SoftOfferInput {
   positionSought: PositionSought;
   currentValue: number;
   currentDebtOwed: number | null; // required for 2nd position / buyout
+}
+
+// Step-by-step numbers behind the quoted range, surfaced on the result screen
+// so a rep (or anyone checking the tool's work) can see exactly how the
+// number was derived rather than trusting a black box.
+export interface SoftOfferBreakdown {
+  position: PositionSought;
+  currentValue: number;
+  ltvLow: number;
+  ltvHigh: number;
+  ltvBandLabel: string;
+  currentDebtOwed: number | null;
+  equityInCollateral: number | null; // 2nd position / buyout only
+  cushionLow: number | null; // 2nd position / buyout only
+  cushionHigh: number | null; // 2nd position / buyout only
+  factorRateLow: number;
+  factorRateHigh: number;
+  factorRateLabel: string;
+  totalPaybackLow: number;
+  totalPaybackHigh: number;
+  amortizationMonths: number;
 }
 
 export type SoftOfferResult =
@@ -81,6 +111,7 @@ export type SoftOfferResult =
       softOfferMax: number;
       estimatedMonthlyMin: number;
       estimatedMonthlyMax: number;
+      breakdown: SoftOfferBreakdown;
     };
 
 export function calculateSoftOffer(input: SoftOfferInput): SoftOfferResult {
@@ -88,6 +119,7 @@ export function calculateSoftOffer(input: SoftOfferInput): SoftOfferResult {
 
   let softOfferMin: number;
   let softOfferMax: number;
+  let equityInCollateral: number | null = null;
 
   if (input.positionSought === "first") {
     // Section 7.2
@@ -97,7 +129,7 @@ export function calculateSoftOffer(input: SoftOfferInput): SoftOfferResult {
     // Section 7.3 — 2nd position / private lender buyout
     const debt = input.currentDebtOwed ?? 0;
     const applicableLtv = band.low; // A5
-    const equityInCollateral = input.currentValue * applicableLtv - debt;
+    equityInCollateral = input.currentValue * applicableLtv - debt;
     softOfferMin = equityInCollateral * SECOND_POSITION_CUSHION.low;
     softOfferMax = equityInCollateral * SECOND_POSITION_CUSHION.high;
   }
@@ -121,5 +153,22 @@ export function calculateSoftOffer(input: SoftOfferInput): SoftOfferResult {
     softOfferMax,
     estimatedMonthlyMin: totalPaybackLow / AMORTIZATION_MONTHS,
     estimatedMonthlyMax: totalPaybackHigh / AMORTIZATION_MONTHS,
+    breakdown: {
+      position: input.positionSought,
+      currentValue: input.currentValue,
+      ltvLow: band.low,
+      ltvHigh: band.high,
+      ltvBandLabel: band.label,
+      currentDebtOwed: input.currentDebtOwed,
+      equityInCollateral,
+      cushionLow: equityInCollateral !== null ? SECOND_POSITION_CUSHION.low : null,
+      cushionHigh: equityInCollateral !== null ? SECOND_POSITION_CUSHION.high : null,
+      factorRateLow: factorRate.low,
+      factorRateHigh: factorRate.high,
+      factorRateLabel: factorRate.label,
+      totalPaybackLow,
+      totalPaybackHigh,
+      amortizationMonths: AMORTIZATION_MONTHS,
+    },
   };
 }

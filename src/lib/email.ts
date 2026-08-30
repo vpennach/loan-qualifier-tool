@@ -37,7 +37,7 @@ function buildEmailHtml(p: VpNotificationPayload): string {
     <p>${f.rep_name} — ${f.rep_phone} — ${f.rep_email}</p>
 
     <h3>Borrower / Property</h3>
-    <p><strong>Borrower:</strong> ${f.borrower_name || "—"}</p>
+    <p><strong>Borrower:</strong> ${f.borrower_name || "—"} — ${f.borrower_phone || "—"} — ${f.borrower_email || "—"}</p>
     <p><strong>Address:</strong> ${f.property_address || "—"}, ${f.property_city || "—"}, ${f.property_state || "—"} ${f.property_zip || "—"}</p>
     <p><strong>Property Type:</strong> ${f.property_type || "—"}</p>
     <p><strong>Position Sought:</strong> ${f.position_sought || "—"}</p>

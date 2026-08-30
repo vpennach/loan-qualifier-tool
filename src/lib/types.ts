@@ -82,6 +82,8 @@ export interface Submission {
   rep_phone: string;
   rep_email: string;
   borrower_name: string | null;
+  borrower_phone: string | null;
+  borrower_email: string | null;
   property_address: string | null;
   property_city: string | null;
   property_state: string | null;
@@ -120,6 +122,8 @@ export interface DealFormState {
   sole_owner: "" | "yes" | "no";
   co_owner_names: string;
   borrower_name: string;
+  borrower_phone: string;
+  borrower_email: string;
   property_address: string;
   property_city: string;
   property_zip: string;
@@ -141,6 +145,8 @@ export const EMPTY_DEAL_FORM_STATE: DealFormState = {
   sole_owner: "",
   co_owner_names: "",
   borrower_name: "",
+  borrower_phone: "",
+  borrower_email: "",
   property_address: "",
   property_city: "",
   property_zip: "",

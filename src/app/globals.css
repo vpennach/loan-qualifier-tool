@@ -12,12 +12,10 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* This app's UI is a fixed light theme (white/slate-50 cards and inputs) with
+   no dark-mode styling built for it, so --foreground must not follow OS dark
+   mode — a prefers-color-scheme override here previously made typed input
+   text near-invisible (light gray on white) whenever the OS was in dark mode. */
 
 body {
   background: var(--background);

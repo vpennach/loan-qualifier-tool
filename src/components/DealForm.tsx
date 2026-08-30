@@ -133,6 +133,7 @@ export function DealForm() {
         softOfferMax: offer.softOfferMax,
         estimatedMonthlyMin: offer.estimatedMonthlyMin,
         estimatedMonthlyMax: offer.estimatedMonthlyMax,
+        breakdown: offer.breakdown,
       });
     }
     setStage("result");
@@ -189,7 +190,7 @@ export function DealForm() {
       <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Your Info</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Field label="Your Name" htmlFor="rep_name">
+          <Field label="Full Name" htmlFor="rep_name">
             <input
               id="rep_name"
               className={inputClass}
@@ -216,6 +217,42 @@ export function DealForm() {
               value={form.rep_email}
               onChange={(e) => update("rep_email", e.target.value)}
               required
+            />
+          </Field>
+        </div>
+      </section>
+
+      {/* Borrower — not part of the disqualification lock chain */}
+      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Borrower</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Field label="Full Name" htmlFor="borrower_name">
+            <input
+              id="borrower_name"
+              className={inputClass}
+              disabled={locked("borrower_name")}
+              value={form.borrower_name}
+              onChange={(e) => update("borrower_name", e.target.value)}
+            />
+          </Field>
+          <Field label="Phone" htmlFor="borrower_phone">
+            <input
+              id="borrower_phone"
+              type="tel"
+              className={inputClass}
+              disabled={locked("borrower_phone")}
+              value={form.borrower_phone}
+              onChange={(e) => update("borrower_phone", e.target.value)}
+            />
+          </Field>
+          <Field label="Email" htmlFor="borrower_email">
+            <input
+              id="borrower_email"
+              type="email"
+              className={inputClass}
+              disabled={locked("borrower_email")}
+              value={form.borrower_email}
+              onChange={(e) => update("borrower_email", e.target.value)}
             />
           </Field>
         </div>
@@ -302,6 +339,36 @@ export function DealForm() {
               onChange={(e) => update("current_value", e.target.value)}
             />
           </Field>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Field label="Property Address" htmlFor="property_address">
+              <input
+                id="property_address"
+                className={inputClass}
+                disabled={locked("property_address")}
+                value={form.property_address}
+                onChange={(e) => update("property_address", e.target.value)}
+              />
+            </Field>
+            <Field label="City" htmlFor="property_city">
+              <input
+                id="property_city"
+                className={inputClass}
+                disabled={locked("property_city")}
+                value={form.property_city}
+                onChange={(e) => update("property_city", e.target.value)}
+              />
+            </Field>
+            <Field label="Zip" htmlFor="property_zip">
+              <input
+                id="property_zip"
+                className={inputClass}
+                disabled={locked("property_zip")}
+                value={form.property_zip}
+                onChange={(e) => update("property_zip", e.target.value)}
+              />
+            </Field>
+          </div>
         </div>
       </section>
 
@@ -386,46 +453,6 @@ export function DealForm() {
               </Field>
             </>
           )}
-
-          <Field label="Borrower Name" htmlFor="borrower_name">
-            <input
-              id="borrower_name"
-              className={inputClass}
-              disabled={locked("borrower_name")}
-              value={form.borrower_name}
-              onChange={(e) => update("borrower_name", e.target.value)}
-            />
-          </Field>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Field label="Property Address" htmlFor="property_address">
-              <input
-                id="property_address"
-                className={inputClass}
-                disabled={locked("property_address")}
-                value={form.property_address}
-                onChange={(e) => update("property_address", e.target.value)}
-              />
-            </Field>
-            <Field label="City" htmlFor="property_city">
-              <input
-                id="property_city"
-                className={inputClass}
-                disabled={locked("property_city")}
-                value={form.property_city}
-                onChange={(e) => update("property_city", e.target.value)}
-              />
-            </Field>
-            <Field label="Zip" htmlFor="property_zip">
-              <input
-                id="property_zip"
-                className={inputClass}
-                disabled={locked("property_zip")}
-                value={form.property_zip}
-                onChange={(e) => update("property_zip", e.target.value)}
-              />
-            </Field>
-          </div>
 
           <Field label="Exit Strategy" htmlFor="exit_strategy">
             <select

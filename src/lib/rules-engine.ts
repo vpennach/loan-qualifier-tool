@@ -18,18 +18,20 @@ import type { DealFormState } from "@/lib/types";
 // Order the disqualification-relevant fields appear in the form. Used to
 // determine which fields come "after" a triggering field for locking.
 export const FIELD_ORDER = [
+  "borrower_name",
+  "borrower_phone",
+  "borrower_email",
   "property_state",
   "property_type",
   "property_subtypes",
   "current_value",
+  "property_address",
+  "property_city",
+  "property_zip",
   "position_sought",
   "current_debt_owed",
   "sole_owner",
   "co_owner_names",
-  "borrower_name",
-  "property_address",
-  "property_city",
-  "property_zip",
   "exit_strategy",
   "use_of_funds",
 ] as const;

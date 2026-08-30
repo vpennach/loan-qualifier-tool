@@ -66,6 +66,8 @@ create table submissions (
   rep_email text not null,
 
   borrower_name text,
+  borrower_phone text,
+  borrower_email text,
   property_address text,
   property_city text,
   property_state text check (char_length(property_state) = 2),

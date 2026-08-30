@@ -14,6 +14,8 @@ function toSubmissionRow(shopId: string, form: DealFormState) {
     rep_phone: form.rep_phone,
     rep_email: form.rep_email,
     borrower_name: form.borrower_name || null,
+    borrower_phone: form.borrower_phone || null,
+    borrower_email: form.borrower_email || null,
     property_address: form.property_address || null,
     property_city: form.property_city || null,
     property_state: form.property_state || null,

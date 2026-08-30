@@ -41,13 +41,24 @@ function form(overrides: Partial<DealFormState>): DealFormState {
     currentValue: 500000,
     currentDebtOwed: null,
   });
-  check("clean deal: offer", offer, {
+  check("clean deal: offer", offer.kind === "soft_offer" ? {
+    kind: offer.kind,
+    softOfferMin: offer.softOfferMin,
+    softOfferMax: offer.softOfferMax,
+    estimatedMonthlyMin: offer.estimatedMonthlyMin,
+    estimatedMonthlyMax: offer.estimatedMonthlyMax,
+  } : offer, {
     kind: "soft_offer",
     softOfferMin: 350000,
     softOfferMax: 375000,
     estimatedMonthlyMin: (350000 * 1.33) / 36,
     estimatedMonthlyMax: (375000 * 1.44) / 36,
   });
+  check(
+    "clean deal: breakdown LTV band",
+    offer.kind === "soft_offer" ? [offer.breakdown.ltvLow, offer.breakdown.ltvHigh] : null,
+    [0.7, 0.75]
+  );
 }
 
 // 2. Full state ban (Nevada)
@@ -151,13 +162,24 @@ function form(overrides: Partial<DealFormState>): DealFormState {
     currentValue: 500000,
     currentDebtOwed: 200000,
   });
-  check("2nd position offer", offer, {
+  check("2nd position offer", offer.kind === "soft_offer" ? {
+    kind: offer.kind,
+    softOfferMin: offer.softOfferMin,
+    softOfferMax: offer.softOfferMax,
+    estimatedMonthlyMin: offer.estimatedMonthlyMin,
+    estimatedMonthlyMax: offer.estimatedMonthlyMax,
+  } : offer, {
     kind: "soft_offer",
     softOfferMin: 109500,
     softOfferMax: 120000,
     estimatedMonthlyMin: (109500 * 1.33) / 36,
     estimatedMonthlyMax: (120000 * 1.44) / 36,
   });
+  check(
+    "2nd position offer: breakdown equity",
+    offer.kind === "soft_offer" ? offer.breakdown.equityInCollateral : null,
+    150000
+  );
 }
 
 // 11. Capped-state band (NY/MI/MN)
@@ -169,7 +191,13 @@ function form(overrides: Partial<DealFormState>): DealFormState {
     currentValue: 1000000,
     currentDebtOwed: null,
   });
-  check("MI capped band", offer, {
+  check("MI capped band", offer.kind === "soft_offer" ? {
+    kind: offer.kind,
+    softOfferMin: offer.softOfferMin,
+    softOfferMax: offer.softOfferMax,
+    estimatedMonthlyMin: offer.estimatedMonthlyMin,
+    estimatedMonthlyMax: offer.estimatedMonthlyMax,
+  } : offer, {
     kind: "soft_offer",
     softOfferMin: 650000,
     softOfferMax: 700000,
