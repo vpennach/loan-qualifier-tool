@@ -17,6 +17,9 @@ node_modules
 .DS_Store
 *.pem
 
+# confidential internal source material — reference by name in README, don't commit
+Updated Product structure .docx
+
 # debug
 npm-debug.log*
 yarn-debug.log*

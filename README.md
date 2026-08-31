@@ -1,7 +1,11 @@
 # Loan Pre-Qualification Tool (Phase 1)
 
 Live loan pre-qualification and soft-offer tool for iso-shop sales reps. See
-`loan-qualifier-tool-spec.md` for the full product spec this was built from.
+`loan-qualifier-tool-spec.md` for the original product spec this was built
+from, and `Updated Product structure .docx` (WBL internal closer training)
+for the underlying source material that spec was itself summarizing — the
+latter has since corrected a couple of things the spec got wrong (see
+Assumptions below).
 
 Stack: Next.js (App Router) + Supabase (Postgres + Auth) + Tailwind + Resend.
 
@@ -13,8 +17,9 @@ Stack: Next.js (App Router) + Supabase (Postgres + Auth) + Tailwind + Resend.
    ```
 
 2. **Create a Supabase project** at [supabase.com](https://supabase.com), then run
-   `supabase/migrations/0001_init.sql` against it (SQL Editor, or `supabase db push`
-   if you're using the CLI).
+   every file under `supabase/migrations/` against it, in order (SQL Editor, or
+   `supabase db push` if you're using the CLI). There's no migration tooling wired
+   up — each file has to be applied by hand.
 
 3. **Copy env vars**
    ```bash
@@ -55,18 +60,32 @@ Stack: Next.js (App Router) + Supabase (Postgres + Auth) + Tailwind + Resend.
 - End-to-end (shop login → form → email) needs a real Supabase project and Resend
   key configured as above; there's no mock backend for this in Phase 1.
 
-## Assumptions flagged for the VP (per spec Section 10 — do not silently trust these)
+## Assumptions flagged for the VP (do not silently trust these)
 
-The spec explicitly calls out two of these; three more turned up while implementing
-Section 7's math, where the source table didn't give clean answers. All are isolated
-in `src/lib/soft-offer.ts` (see the comment block at the top of that file) so they're
-easy to find and change once confirmed:
+**RESOLVED by "Updated Product structure .docx"** — the WBL closer training doc's
+worked examples confirmed or corrected the original spec's Section 10 assumptions:
 
-1. **Commercial factor rate low end** — assumed 1.45; source material only specifies "up to 1.63."
-2. **2nd-position cushion (73%–80% of equity)** — from one worked example, not a stated general rule.
-3. **LTV band low/high when the spec's table gives a single number instead of a range** (e.g. commercial standard-state "65% typical / 70% max") — we treat that as the quoted [low, high] band. Where the table already gives a range (residential standard-state 70%–75%), we use it as-is and treat "max clean file" (80%) as an unused ceiling, not part of the quote.
-4. **Land and industrial property types have no LTV band or factor rate defined anywhere in Section 7** (only Residential and Commercial rows exist). They default to the Commercial numbers as the closer analog.
-5. **Which single point in the LTV band feeds the 2nd-position equity formula** — the formula needs one percentage, the table gives a range; we use the band's low end (the conservative default).
+- **Minimum loan size, not minimum property value.** The original spec's $100k/$250k
+  floor checked `current_value` directly ("Property value is below our $100,000
+  minimum"). That was wrong — the training doc is explicit these are minimum LOAN
+  sizes: $100,000 residential, $250,000 commercial, $250,000 for NY residential
+  specifically. A cheap property can still qualify if the LTV math clears the floor;
+  an expensive one can still fail it in 2nd position once debt is netted out. Fixed
+  in `rules-engine.ts` (`computeOfferRange` + `minimumLoanThreshold` in
+  `soft-offer.ts`) — the check now runs the actual loan-range math live, as soon as
+  state/type/value/position(/debt) are all present, instead of checking the raw
+  value the instant it's typed.
+- **Residential factor rate (1.33–1.44)** — confirmed exactly by Example A (1.35, in-range).
+- **Residential LTV (70%–75% typical, 80% ceiling)** — confirmed by Example A (72% LTV, within the typical band).
+- **2nd-position cushion (73%–80% of equity)** — confirmed by the dedicated Equity Formula worked example: $375,000 equity → $275,000–$300,000 offer is exactly 73.3%–80%.
+
+**STILL UNRESOLVED** — flag to the VP before trusting these for a real quote. All
+isolated in `src/lib/soft-offer.ts`'s header comment so they're easy to find:
+
+1. **Commercial factor rate low end** — still assumed 1.45; the training doc still only says "up to 1.63." Example D uses 1.58 for one file, which doesn't resolve the low end either.
+2. **Commercial LTV band** — the training doc gives no "typical" for commercial, only "up to 70%" (max). We currently quote 65%–70% (the 65% is inherited from the original spec and isn't actually supported anywhere in the training doc — Example D just uses a flat 70%). Worth confirming whether commercial should be a single ~70% point instead of a range.
+3. **Land and industrial property types** have no LTV band, factor rate, or minimum loan size defined in either document. They default to the Commercial numbers as the closer analog.
+4. **Which single point in the LTV band feeds the 2nd-position equity formula** — the dedicated worked example uses 75% (the band's HIGH end), but a different example in the same doc (Example B) implies something closer to no cushion at all applied. These two examples don't agree with each other. We still use the band's LOW end (conservative default) pending clarification.
 
 Also flagged, not yet resolved by design (per spec Section 10, items 3–4):
 - Whether onboarding-only Admins should eventually see submission data — not built, Admin is scoped to shop management only.
@@ -74,9 +93,15 @@ Also flagged, not yet resolved by design (per spec Section 10, items 3–4):
 
 ## Notable implementation choices not spelled out in the spec
 
-- **Rep contact fields (name/phone/email) are positioned first**, ahead of the
-  fast-disqualification fields (state/type/value). The DB requires them NOT NULL,
-  and disqualification can otherwise trigger before a rep would reach them.
+- **Form order**: Rep Info → Borrower → Property → Deal Details (per rep UX feedback,
+  not the spec's original layout). Rep contact fields stay first since the DB
+  requires them NOT NULL and disqualification can otherwise trigger before a rep
+  would reach them; Borrower Name/Phone/Email come next, ahead of the
+  fast-disqualification fields, since a rep naturally asks who they're talking to
+  before diving into property details.
+- **"Show the math"** on the qualifying-deal result screen — a collapsible
+  breakdown of the actual LTV/equity/factor-rate arithmetic behind the quoted
+  range, not just the final numbers (`src/lib/soft-offer.ts`'s `SoftOfferBreakdown`).
 - **Property subtype capture** (Section 6.1) is implemented as a checklist plus a
   `property_subtypes` array column and `assisted_living_converted_sfr` boolean —
   these aren't in the spec's literal Section 4 table but are necessary to catch the

@@ -327,7 +327,7 @@ export function DealForm() {
             </fieldset>
           )}
 
-          <Field label="Current Value" htmlFor="current_value" hint="Minimum $100,000 (NY residential: $250,000)">
+          <Field label="Current Value" htmlFor="current_value">
             <input
               id="current_value"
               type="number"

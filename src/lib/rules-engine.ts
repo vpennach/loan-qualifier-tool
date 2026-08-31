@@ -13,7 +13,11 @@ import {
   RESIDENTIAL_PROPERTY_TYPES,
   stateName,
 } from "@/lib/constants";
-import type { DealFormState } from "@/lib/types";
+import { computeOfferRange, minimumLoanThreshold } from "@/lib/soft-offer";
+import type { DealFormState, PositionSought } from "@/lib/types";
+
+const currency = (n: number) =>
+  n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
 // Order the disqualification-relevant fields appear in the form. Used to
 // determine which fields come "after" a triggering field for locking.
@@ -105,19 +109,51 @@ export function evaluateLiveRules(form: DealFormState): LiveVerdict {
     };
   }
 
-  // --- 4. current_value: value floor, with NY residential override ---
-  if (value !== null && !Number.isNaN(value)) {
-    const isNyResidential = state === "NY" && type !== null && RESIDENTIAL_PROPERTY_TYPES.includes(type);
-    const floor = isNyResidential ? 250000 : 100000;
+  // --- 4. state + type + value + position (+ debt for 2nd/buyout): minimum
+  // loan size floor. This is a minimum LOAN SIZE, not a minimum property
+  // value — a property can be worth less than $100k and still qualify if the
+  // math works, and a property worth well over $100k can still fail the
+  // floor in 2nd position once debt is netted out. So this can't fire off
+  // current_value alone; it needs enough fields to actually compute the
+  // range, same math as the final quote (see soft-offer.ts). Skipped for
+  // Alaska, which never gets a computed offer at all (see below).
+  const positionKnown = form.position_sought !== "";
+  const debtKnown = form.position_sought === "first" || form.current_debt_owed !== "";
+  if (
+    state &&
+    state !== "AK" &&
+    type &&
+    value !== null &&
+    !Number.isNaN(value) &&
+    positionKnown &&
+    debtKnown
+  ) {
+    const debt = form.current_debt_owed ? Number(form.current_debt_owed) : null;
+    if (form.position_sought === "first" || debt === null || !Number.isNaN(debt)) {
+      const { softOfferMax } = computeOfferRange({
+        propertyState: state,
+        propertyType: type,
+        positionSought: form.position_sought as PositionSought,
+        currentValue: value,
+        currentDebtOwed: debt,
+      });
+      const threshold = minimumLoanThreshold(state, type);
 
-    if (value < floor) {
-      return {
-        kind: "disqualified",
-        reason: isNyResidential
-          ? "New York residential properties require a minimum value of $250,000."
-          : "Property value is below our $100,000 minimum.",
-        lockFromField: "current_value",
-      };
+      if (softOfferMax < threshold) {
+        const isNyResidential = state === "NY" && RESIDENTIAL_PROPERTY_TYPES.includes(type);
+        const label = isNyResidential
+          ? "New York residential"
+          : RESIDENTIAL_PROPERTY_TYPES.includes(type)
+            ? "residential"
+            : "commercial";
+        return {
+          kind: "disqualified",
+          reason: `Based on the numbers entered, the maximum loan we could offer is ${currency(
+            softOfferMax
+          )} — below our ${currency(threshold)} minimum for ${label} properties.`,
+          lockFromField: form.position_sought === "first" ? "position_sought" : "current_debt_owed",
+        };
+      }
     }
   }
 

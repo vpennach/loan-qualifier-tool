@@ -1,35 +1,53 @@
 // Section 7 — soft offer calculation engine.
 //
-// ASSUMPTIONS FLAGGED PER SECTION 10 (do not silently trust these — confirm
-// with the VP before relying on this tool for real quotes):
+// Numbers below were cross-checked against "Updated Product structure.docx"
+// (WBL internal closer training), which the spec's Section 7 was itself
+// summarizing. Where that doc gave a concrete worked example, we used it to
+// confirm or correct the assumptions flagged in the original spec's Section 10.
 //
-//   A1. Commercial factor rate low end (Section 7.5): the source material only
-//       gives "up to 1.63" for commercial. We use 1.45 as the assumed low end.
+// CONFIRMED by the training doc's worked examples:
+//   - Residential factor rate 1.33–1.44 (Example A: 1.35, in-range).
+//   - Residential LTV 70%–75% typical / 80% ceiling (Example A: 72% LTV).
+//   - 2nd-position cushion of 73%–80% of equity (the dedicated "Equity
+//     Formula" example: $375,000 equity -> $275,000-$300,000 offer, which is
+//     exactly 73.3%-80% of $375,000).
 //
-//   A2. 2nd-position cushion of 73%-80% of equity (Section 7.3): derived from a
-//       single worked example, not a stated general rule.
+// STILL ASSUMPTIONS (flag to the VP before trusting for a real quote):
 //
-//   A3. LTV band low/high when Section 7.1's table gives a single "Typical"
-//       number instead of a range (commercial, standard states: "65%" typical,
-//       "70%" max clean file). We treat [Typical, Max clean file] as the quoted
-//       [low, high] band in that case. Where Typical is already a range
-//       (residential, standard states: 70%-75%), we use that range as-is and
-//       treat "Max clean file" (80%) as an unused informational ceiling, NOT
-//       part of the quoted range. This is an inference, not a stated rule —
-//       confirm with the VP.
+//   A1. Commercial factor rate low end: the training doc only gives "up to
+//       1.63" for commercial, same as the original spec. We use 1.45 as the
+//       assumed low end. Example D uses 1.58 for one commercial file, which
+//       doesn't resolve the low end either.
 //
-//   A4. Land and industrial property types have NO LTV band or factor rate
-//       defined anywhere in Section 7 (only "Residential" and "Commercial" rows
-//       exist). We default them to the Commercial band/factor rate as the
-//       closer non-residential analog. Confirm with the VP — this is a gap in
-//       the source material, not a resolved rule.
+//   A3. Commercial LTV: the training doc gives NO "typical" for commercial —
+//       only "up to 70%" (max). Example D uses exactly 70% LTV. We currently
+//       quote a 65%-70% band (65% inherited from the original spec's "Typical"
+//       column), but the training doc doesn't actually support a 65% figure
+//       anywhere. Worth confirming whether commercial should just be quoted
+//       near a single 70% point rather than a range.
 //
-//   A5. The single-point "applicable_LTV%" plugged into the Section 7.3 equity
-//       formula (equity_in_collateral = current_value × applicable_LTV% − debt)
-//       needs one number, but Section 7.1's bands are ranges. We use the LOW
-//       end of the applicable band (the conservative/"Typical" default). Confirm
-//       with the VP — the source material doesn't specify which point in the
-//       band to use here.
+//   A4. Land and industrial property types have no LTV band, factor rate, or
+//       minimum loan size defined anywhere in either source document. We
+//       default them to the Commercial numbers as the closer non-residential
+//       analog.
+//
+//   A5. The single-point LTV% plugged into the 2nd-position equity formula
+//       (equity = current_value × LTV% − debt): the dedicated worked example
+//       uses 75% (the HIGH end of the residential band), but Example B's
+//       numbers imply something closer to a direct value with no cushion at
+//       all applied. These two examples don't fully agree with each other.
+//       We still use the LOW end of the band here (conservative default) —
+//       unresolved, flag to the VP.
+//
+// RESOLVED — minimum loan size (previously implemented as a minimum PROPERTY
+// VALUE in rules-engine.ts, which was wrong): the training doc is explicit
+// that $100,000 / $250,000 are minimum LOAN sizes, not minimum property
+// values. A property can be worth less than $100k and still qualify if the
+// position/LTV math works out; a property worth well over $100k can still
+// fail the floor in 2nd position after debt is netted out. See
+// `minimumLoanThreshold` and `computeOfferRange` below — the live
+// disqualification check now runs the same math as the final quote to catch
+// this, per rules-engine.ts.
 
 import { CAPPED_LTV_STATES, RESIDENTIAL_PROPERTY_TYPES } from "@/lib/constants";
 import type { PositionSought, PropertyType } from "@/lib/types";
@@ -40,15 +58,27 @@ interface LtvBand {
 }
 
 const CAPPED_STATE_BAND: LtvBand = { low: 0.65, high: 0.7 }; // Section 7.1, explicit — no exceptions
-const RESIDENTIAL_STANDARD_BAND: LtvBand = { low: 0.7, high: 0.75 }; // A3
-const COMMERCIAL_STANDARD_BAND: LtvBand = { low: 0.65, high: 0.7 }; // A3 (Typical -> Max clean file)
+const RESIDENTIAL_STANDARD_BAND: LtvBand = { low: 0.7, high: 0.75 }; // confirmed, see header
+const COMMERCIAL_STANDARD_BAND: LtvBand = { low: 0.65, high: 0.7 }; // A3
 
-const RESIDENTIAL_FACTOR_RATE = { low: 1.33, high: 1.44 };
+const RESIDENTIAL_FACTOR_RATE = { low: 1.33, high: 1.44 }; // confirmed, see header
 const COMMERCIAL_FACTOR_RATE = { low: 1.45, high: 1.63 }; // A1
 
 const LARGE_LOAN_THRESHOLD = 1_500_000; // Section 7.4
-const SECOND_POSITION_CUSHION = { low: 0.73, high: 0.8 }; // A2
+const SECOND_POSITION_CUSHION = { low: 0.73, high: 0.8 }; // confirmed, see header
 const AMORTIZATION_MONTHS = 36;
+
+// Minimum LOAN size (not property value) — "Updated Product structure.docx",
+// section "Minimum Loan Size". NY residential is the one stated exception.
+const RESIDENTIAL_MIN_LOAN = 100_000;
+const COMMERCIAL_MIN_LOAN = 250_000; // A4: land/industrial treated as commercial here too
+const NY_RESIDENTIAL_MIN_LOAN = 250_000;
+
+export function minimumLoanThreshold(propertyState: string, propertyType: PropertyType): number {
+  const isResidential = RESIDENTIAL_PROPERTY_TYPES.includes(propertyType);
+  if (isResidential && propertyState === "NY") return NY_RESIDENTIAL_MIN_LOAN;
+  return isResidential ? RESIDENTIAL_MIN_LOAN : COMMERCIAL_MIN_LOAN;
+}
 
 export function applicableLtvBand(
   propertyState: string,
@@ -77,6 +107,42 @@ export interface SoftOfferInput {
   positionSought: PositionSought;
   currentValue: number;
   currentDebtOwed: number | null; // required for 2nd position / buyout
+}
+
+// The raw LTV/equity math, with the minimum-loan-size floor applied to the
+// low end of the range (we'll never advertise a number below what we're
+// actually willing to lend). Deliberately excludes the $1.5M ceiling check —
+// that's a disqualifying override, not part of the range itself — so this
+// can be reused by rules-engine.ts to test the floor live, before the rep
+// even reaches "Check This Deal".
+export function computeOfferRange(input: SoftOfferInput): {
+  softOfferMin: number;
+  softOfferMax: number;
+  equityInCollateral: number | null;
+  band: LtvBand & { label: string };
+} {
+  const band = applicableLtvBand(input.propertyState, input.propertyType);
+  let softOfferMin: number;
+  let softOfferMax: number;
+  let equityInCollateral: number | null = null;
+
+  if (input.positionSought === "first") {
+    // Section 7.2
+    softOfferMin = input.currentValue * band.low;
+    softOfferMax = input.currentValue * band.high;
+  } else {
+    // Section 7.3 — 2nd position / private lender buyout
+    const debt = input.currentDebtOwed ?? 0;
+    const applicableLtv = band.low; // A5
+    equityInCollateral = input.currentValue * applicableLtv - debt;
+    softOfferMin = equityInCollateral * SECOND_POSITION_CUSHION.low;
+    softOfferMax = equityInCollateral * SECOND_POSITION_CUSHION.high;
+  }
+
+  const threshold = minimumLoanThreshold(input.propertyState, input.propertyType);
+  softOfferMin = Math.min(Math.max(softOfferMin, threshold), softOfferMax);
+
+  return { softOfferMin, softOfferMax, equityInCollateral, band };
 }
 
 // Step-by-step numbers behind the quoted range, surfaced on the result screen
@@ -115,24 +181,7 @@ export type SoftOfferResult =
     };
 
 export function calculateSoftOffer(input: SoftOfferInput): SoftOfferResult {
-  const band = applicableLtvBand(input.propertyState, input.propertyType);
-
-  let softOfferMin: number;
-  let softOfferMax: number;
-  let equityInCollateral: number | null = null;
-
-  if (input.positionSought === "first") {
-    // Section 7.2
-    softOfferMin = input.currentValue * band.low;
-    softOfferMax = input.currentValue * band.high;
-  } else {
-    // Section 7.3 — 2nd position / private lender buyout
-    const debt = input.currentDebtOwed ?? 0;
-    const applicableLtv = band.low; // A5
-    equityInCollateral = input.currentValue * applicableLtv - debt;
-    softOfferMin = equityInCollateral * SECOND_POSITION_CUSHION.low;
-    softOfferMax = equityInCollateral * SECOND_POSITION_CUSHION.high;
-  }
+  const { softOfferMin, softOfferMax, equityInCollateral, band } = computeOfferRange(input);
 
   // Section 7.4 — large loan override
   if (softOfferMax >= LARGE_LOAN_THRESHOLD) {

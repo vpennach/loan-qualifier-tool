@@ -121,18 +121,83 @@ function form(overrides: Partial<DealFormState>): DealFormState {
   check("assisted living non-converted disqualified", evaluateLiveRules(f2).kind, "disqualified");
 }
 
-// 7. Value floor
+// 7. Minimum LOAN size floor (not a minimum property value) — residential
+// $100k, commercial $250k, NY residential $250k. A property can be worth
+// less than the floor and still qualify if the computed max loan clears it,
+// and a property worth well over the floor can still fail it.
 {
-  const f = form({ property_state: "CA", property_type: "commercial", current_value: "50000" });
-  check("below value floor disqualified", evaluateLiveRules(f).kind, "disqualified");
+  // $150k property, CA residential, 1st position -> range $105k-$112.5k.
+  // Well above the OLD (wrong) $100k value floor, and the computed loan max
+  // clears $100k too, so this must NOT be disqualified.
+  const f = form({
+    property_state: "CA",
+    property_type: "primary_residence",
+    current_value: "150000",
+    position_sought: "first",
+  });
+  check("property worth $150k, loan range clears $100k floor: clean", evaluateLiveRules(f).kind, "clean");
 }
-
-// 7b. NY residential override
 {
-  const f = form({ property_state: "NY", property_type: "primary_residence", current_value: "200000" });
-  check("NY residential below 250k disqualified", evaluateLiveRules(f).kind, "disqualified");
-  const f2 = form({ property_state: "NY", property_type: "commercial", current_value: "150000" });
-  check("NY commercial 150k not disqualified by NY override", evaluateLiveRules(f2).kind, "clean");
+  // $120k property, CA residential, 1st position -> range $84k-$90k. Max
+  // loan ($90k) is below the $100k floor even though the property itself
+  // isn't absurdly cheap — this is the exact case that was missed before.
+  const f = form({
+    property_state: "CA",
+    property_type: "primary_residence",
+    current_value: "120000",
+    position_sought: "first",
+  });
+  check("max loan below $100k floor disqualified", evaluateLiveRules(f).kind, "disqualified");
+}
+{
+  // $140k property, CA residential, 1st position -> range $98k-$105k.
+  // Straddles the floor: NOT disqualified (max clears $100k), but the final
+  // quote's displayed min must be clamped up to $100k, never shown as $98k.
+  const offer = calculateSoftOffer({
+    propertyState: "CA",
+    propertyType: "primary_residence",
+    positionSought: "first",
+    currentValue: 140000,
+    currentDebtOwed: null,
+  });
+  check(
+    "straddling range clamps min to $100k floor",
+    offer.kind === "soft_offer" ? offer.softOfferMin : null,
+    100000
+  );
+}
+{
+  // $300k commercial property, CA, 1st position, standard band 65%-70% ->
+  // range $195k-$210k. Max ($210k) is below the $250k commercial floor.
+  const f = form({
+    property_state: "CA",
+    property_type: "commercial",
+    current_value: "300000",
+    position_sought: "first",
+  });
+  check("commercial max loan below $250k floor disqualified", evaluateLiveRules(f).kind, "disqualified");
+}
+{
+  // $350k residential in NY (capped-state band 65%-70%) -> range
+  // $227.5k-$245k. Max ($245k) is below the NY-residential-specific $250k
+  // floor, even though the general residential floor is only $100k.
+  const f = form({
+    property_state: "NY",
+    property_type: "primary_residence",
+    current_value: "350000",
+    position_sought: "first",
+  });
+  check("NY residential max loan below $250k floor disqualified", evaluateLiveRules(f).kind, "disqualified");
+
+  // Same value, non-NY state -> standard 70%-75% band -> range
+  // $245k-$262.5k, clears the general $100k residential floor.
+  const f2 = form({
+    property_state: "CA",
+    property_type: "primary_residence",
+    current_value: "350000",
+    position_sought: "first",
+  });
+  check("same value outside NY clears general $100k floor: clean", evaluateLiveRules(f2).kind, "clean");
 }
 
 // 8. Alaska case
